@@ -11,6 +11,10 @@ import SettingsScreen from "./screens/SettingScreen";
 import RechangePasswordScreen from "./screens/RechangePasswordScreen";
 import FriendListScreen from "./screens/FriendListScreen";
 import OtpScreen from "./screens/OtpScreen";
+import AddMembersScreen from "./screens/AddMembersScreen";
+// import ChatGroup from "./screens/ChatGroup";
+// import MemberInfoScreen from "./screens/GroupInfoScreen";
+import GroupInfoScreen from "./screens/GroupInfoScreen";
 
 import { AuthProvider } from "./provider/AuthProvider";
 import { ChatProvider } from "./provider/ChatProvider";
@@ -25,12 +29,7 @@ const App = () => {
           <Stack.Navigator initialRouteName="Login">
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Signup" component={SignupScreen} />
-            <Stack.Screen
-              name="ChatList"
-              component={({ navigation }) => (
-                <ChatList navigation={navigation} />
-              )}
-            />
+            <Stack.Screen name="ChatList" component={ChatList} />
             <Stack.Screen name="ChatScreen" component={ChatScreen} />
             <Stack.Screen name="OtpScreen" component={OtpScreen} />
             <Stack.Screen
@@ -47,6 +46,10 @@ const App = () => {
             />
             <Stack.Screen name="Setting" component={SettingsScreen} />
             <Stack.Screen name="FriendList" component={FriendListScreen} />
+            <Stack.Screen name="AddMembers" component={AddMembersScreen} />
+            {/* <Stack.Screen name="ChatGroup" component={ChatGroup} />
+            <Stack.Screen name="MemberInfo" component={MemberInfoScreen} /> */}
+            <Stack.Screen name="GroupInfo" component={GroupInfoScreen} />
           </Stack.Navigator>
         </NavigationContainer>
       </ChatProvider>

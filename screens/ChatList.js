@@ -7,12 +7,15 @@ import {
   TouchableOpacity,
   Image,
   TextInput,
+  SafeAreaView,
+  ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import userService from "../services/userService";
 import { useAuth } from "../provider/AuthProvider";
 import { useChat } from "../provider/ChatProvider";
 import chatService from "../services/chatService";
+import socket from "../config/socket";
 
 const ChatList = ({ chats, navigation }) => {
   const [searchText, setSearchText] = useState("");
@@ -66,6 +69,23 @@ const ChatList = ({ chats, navigation }) => {
 
     fetchUsers();
   }, [searchText, userVerified._id]);
+
+  useEffect(() => {
+    socket.on("created-room", (data) => {
+      console.log("Received created room event:", data);
+      setRoomList((prevRoomList) => [...prevRoomList, data.createdRoom]);
+    });
+
+    socket.on("sorted-room", (data) => {
+      fetchUpdatedRooms();
+    });
+
+    return () => {
+      socket.off("created-room");
+      socket.off("sorted-room");
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket]);
 
   const handleSearch = (text) => {
     setSearchText(text);
@@ -125,66 +145,70 @@ const ChatList = ({ chats, navigation }) => {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       {/* Search bar */}
-      <View style={styles.search}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search..."
-          value={searchText}
-          onChangeText={handleSearch}
+      <ScrollView>
+        <View style={styles.containerSearch}>
+          <View style={styles.search}>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search..."
+              value={searchText}
+              onChangeText={handleSearch}
+            />
+            <Ionicons name="search" size={24} color="black" />
+          </View>
+          <FlatList
+            data={filteredUsers}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                onPress={async () => {
+                  const friend = isFriend(item);
+                  if (friend) {
+                    await handleUserSelect(item);
+                  } else {
+                    await handleAddFriend(item);
+                  }
+                }}
+              >
+                <View style={styles.chat}>
+                  <Image
+                    source={{ uri: item.profilePic }}
+                    style={styles.avatar}
+                  />
+                  <View style={styles.chatContent}>
+                    <Text style={styles.sender}>{item.username}</Text>
+                  </View>
+                  {/* Kiểm tra nếu không phải là bạn bè thì hiển thị icon kết bạn */}
+                  {!isFriend(item) && (
+                    <Ionicons name="person-add" size={24} color="blue" />
+                  )}
+                </View>
+              </TouchableOpacity>
+            )}
+            keyExtractor={(item) => item._id.toString()}
+          />
+        </View>
+        {/* Chatroom */}
+        <FlatList
+          data={roomList}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.chatroom}
+              onPress={() => {
+                setSelectedRoom(item);
+                navigation.navigate("ChatScreen");
+              }}
+            >
+              {/* Hiển thị biểu tượng phòng chat */}
+              <Ionicons name="chatbubbles" size={24} color="green" />
+              {/* Hiển thị tên người nhận tin nhắn ở phần "Room: " */}
+              <Text style={styles.sender}>Room: {getRoomName(item)}</Text>
+            </TouchableOpacity>
+          )}
+          keyExtractor={(item) => item._id.toString()}
         />
-        <Ionicons name="search" size={24} color="black" />
-      </View>
-
-      {/* Hiển thị danh sách người dùng đã lọc */}
-      <FlatList
-        data={filteredUsers}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            onPress={async () => {
-              const friend = isFriend(item);
-              if (friend) {
-                await handleUserSelect(item);
-              } else {
-                await handleAddFriend(item);
-              }
-            }}
-          >
-            <View style={styles.chat}>
-              <Image source={{ uri: item.profilePic }} style={styles.avatar} />
-              <View style={styles.chatContent}>
-                <Text style={styles.sender}>{item.username}</Text>
-              </View>
-              {/* Kiểm tra nếu không phải là bạn bè thì hiển thị icon kết bạn */}
-              {!isFriend(item) && (
-                <Ionicons name="person-add" size={24} color="blue" />
-              )}
-            </View>
-          </TouchableOpacity>
-        )}
-        keyExtractor={(item) => item._id.toString()}
-      />
-
-      {/* Chatroom */}
-      <FlatList
-        data={roomList}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.chatroom}
-            onPress={() => {
-              setSelectedRoom(item);
-              navigation.navigate("ChatScreen");
-            }}
-          >
-            {/* Hiển thị biểu tượng phòng chat */}
-            <Ionicons name="chatbubbles" size={24} color="green" />
-            {/* Hiển thị tên người nhận tin nhắn ở phần "Room: " */}
-            <Text style={styles.sender}>Room: {getRoomName(item)}</Text>
-          </TouchableOpacity>
-        )}
-        keyExtractor={(item) => item._id.toString()}
-      />
+      </ScrollView>
 
       {/* Button to navigate to Settings screen */}
       <View style={styles.settingsButton}>
@@ -192,32 +216,35 @@ const ChatList = ({ chats, navigation }) => {
           <Ionicons name="person" size={24} color="black" />
         </TouchableOpacity>
 
+        <TouchableOpacity onPress={() => navigation.navigate("AddMembers")}>
+          <Ionicons name="person-add" size={24} color="black" />
+        </TouchableOpacity>
+
         <TouchableOpacity onPress={() => navigation.navigate("Setting")}>
           <Ionicons name="settings" size={24} color="black" />
         </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "pink",
+    backgroundColor: "#fff",
   },
   searchInput: {
     padding: 10,
     borderBottomWidth: 1,
     borderBottomColor: "#ccc",
     flex: 1,
-    backgroundColor: "blue",
   },
   chat: {
     flexDirection: "row",
     padding: 10,
     borderBottomWidth: 1,
     borderBottomColor: "#ccc",
-    backgroundColor: "green",
+    alignItems: "center",
   },
   chatroom: {
     flex: 1,
@@ -226,7 +253,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     borderBottomWidth: 1,
     borderBottomColor: "#ccc",
-    backgroundColor: "red",
     alignItems: "flex-start",
   },
   avatar: {
@@ -238,7 +264,6 @@ const styles = StyleSheet.create({
   chatContent: {
     flex: 1,
     justifyContent: "center",
-    backgroundColor: "yellow",
   },
   sender: {
     fontWeight: "bold",
@@ -248,15 +273,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#666",
   },
+  containerSearch: {
+    flexDirection: "column",
+  },
   search: {
+    alignItems: "flex-start",
     flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "violet",
   },
   settingsButton: {
-    bottom: 20, // Đặt nút cài đặt ở dưới cùng của màn hình
-    right: 20,
-    alignItems: "flex-end",
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
     padding: 5,
   },
 });

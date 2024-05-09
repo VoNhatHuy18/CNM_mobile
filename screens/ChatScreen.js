@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -9,19 +9,21 @@ import {
   Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-
+// import EmojiSelector from "react-native-emoji-selector";
 import { useChat } from "../provider/ChatProvider";
 import chatService from "../services/chatService";
 import { useAuth } from "../provider/AuthProvider";
 import socket from "../config/socket";
 
-const ChatScreen = ({ route }) => {
+const ChatScreen = ({ route, navigation }) => {
   const { selectedRoom, fetchUpdatedRooms } = useChat();
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [isReplying, setIsReplying] = useState(false);
   const [replyingMessage, setReplyingMessage] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   const { userVerified } = useAuth();
 
@@ -50,6 +52,10 @@ const ChatScreen = ({ route }) => {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket]);
+
+  useEffect(() => {
+    scrollViewRef.current.scrollToEnd({ animated: true });
+  }, [messages]);
 
   const handleSendMessage = async () => {
     setLoading(true);
@@ -107,6 +113,24 @@ const ChatScreen = ({ route }) => {
     }
   };
 
+  const handleEmojiSelect = (emoji) => {
+    setNewMessage(newMessage + emoji);
+    setShowEmojiPicker(false);
+  };
+
+  const scrollViewRef = useRef();
+
+  const formatMessageTime = (timestamp) => {
+    const date = new Date(timestamp);
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
+    return `${hours}:${minutes < 10 ? "0" : ""}${minutes}`;
+  };
+
+  // const handleInfoPress = () => {
+  //   navigation.navigate("MemberInfo", { member: selectedRoom });
+  // };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -114,7 +138,10 @@ const ChatScreen = ({ route }) => {
           <Ionicons name="chevron-back" size={24} color="#ffffff" />
         </TouchableOpacity>
         <View style={styles.headerInfo}>
-          <Image source={require("../assets/icon.png")} style={styles.avatar} />
+          <Image
+            source={require("../assets/favicon.png")}
+            style={styles.avatar}
+          />
           <Text style={styles.headerText}></Text>
         </View>
         <View style={styles.info}>
@@ -124,15 +151,24 @@ const ChatScreen = ({ route }) => {
           <TouchableOpacity style={styles.infoButton}>
             <Ionicons name="videocam" size={24} color="#ffffff" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.infoButton}>
+          <TouchableOpacity
+            style={styles.infoButton}
+            onPress={() => {
+              navigation.navigate("GroupInfo");
+            }}
+          >
             <Ionicons name="information-circle" size={24} color="#ffffff" />
           </TouchableOpacity>
         </View>
       </View>
-      <ScrollView contentContainerStyle={styles.chatContainer}>
+      <ScrollView
+        ref={scrollViewRef}
+        contentContainerStyle={styles.chatContainer}
+      >
         {/* Example messages */}
         {messages.map((message, index) => {
-          const isSentMessage = message.senderId === userVerified._id;
+          const isSentMessage = message.sender._id === userVerified._id;
+          console.log(message);
           return (
             <View
               key={index}
@@ -158,11 +194,13 @@ const ChatScreen = ({ route }) => {
                 ]}
               >
                 <Text style={styles.messageText}>{message.content}</Text>
-                <Text style={styles.messageTime}>12:30 PM</Text>
+                <Text style={styles.messageTime}>
+                  {formatMessageTime(message.timestamp)}
+                </Text>
               </View>
               {isSentMessage && (
                 <Image
-                  source={require("../assets/icon.png")}
+                  source={require("../assets/favicon.png")}
                   style={styles.avatarSmallright}
                 />
               )}
@@ -186,7 +224,13 @@ const ChatScreen = ({ route }) => {
             value={newMessage}
             onChangeText={(text) => setNewMessage(text)}
           />
-          <TouchableOpacity style={styles.iconButton}>
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={() => setShowEmojiPicker(true)}
+          >
+            {showEmojiPicker && (
+              <EmojiSelector onEmojiSelected={handleEmojiSelect} />
+            )}
             <Ionicons name="happy" size={24} color="#333333" />
           </TouchableOpacity>
         </View>
@@ -281,7 +325,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#333333",
     marginTop: 5,
-    textAlign: "right",
+    textAlign: "left",
   },
   avatarSmallleft: {
     width: 30,
