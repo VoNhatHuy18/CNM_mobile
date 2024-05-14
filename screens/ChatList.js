@@ -39,7 +39,11 @@ const ChatList = ({ chats, navigation }) => {
     const receiver = members.find((member) => member !== userVerified._id);
 
     // Trả về tên người nhận
-    return receiver.username; // Giả sử tên người gửi được lưu trong cột "username"
+    console.log(selectedRoom);
+    const groupName = room.type === "group" ? room.name : null;
+    return groupName || receiver.username;
+
+    // Giả sử tên người gửi được lưu trong cột "username"
   };
 
   useEffect(() => {

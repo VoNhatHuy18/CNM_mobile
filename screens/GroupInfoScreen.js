@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -6,65 +6,171 @@ import {
   Image,
   TouchableOpacity,
   TextInput,
-  Alert,
+  FlatList,
 } from "react-native";
 import { useChat } from "../provider/ChatProvider";
 import { useAuth } from "../provider/AuthProvider";
+import chatService from "../services/chatService";
+import userService from "../services/userService";
 
 const GroupInfoScreen = () => {
-  const { selectedRoom } = useChat();
+  const [searchText, setSearchText] = useState("");
+  const [filteredUsers, setFilteredUsers] = useState([]);
+  const { selectedRoom, setSelectedRoom, setRoomList } = useChat();
+  const [loading, setLoading] = useState(false);
   const [groupName, setGroupName] = useState(selectedRoom.name);
+  const [members, setMembers] = useState(selectedRoom.members);
+  const [newAdmin, setNewAdmin] = useState("");
   const [newMemberUsername, setNewMemberUsername] = useState("");
   const { userVerified } = useAuth();
   // const isAdmin = selectedRoom.admin._id === userVerified._id;
   const isAdmin = true;
   console.log(isAdmin, userVerified);
+  const [groupImage, setGroupImage] = useState(
+    selectedRoom.image || "https://via.placeholder.com/150"
+  );
 
-  const changeGroupName = () => {
-    // Logic to change group name
-    // For example, you can make an API call here
-    console.log("Changing group name to:", groupName);
-    // Update UI or show success message
-    Alert.alert("Group Name Changed", `Group name changed to ${groupName}`);
+  useEffect(() => {
+    const fetchUsers = async () => {
+      if (searchText.trim() !== "") {
+        try {
+          const result = await userService.getAllUsers();
+          const filteredResult = result.filter(
+            (user) => user._id !== userVerified._id
+          );
+          setFilteredUsers(filteredResult);
+        } catch (error) {
+          console.error("Error fetching users:", error);
+        }
+      } else {
+        setFilteredUsers([]);
+      }
+    };
+
+    fetchUsers();
+  }, [searchText, userVerified._id]);
+
+  const handleSearch = (text) => {
+    setSearchText(text);
   };
 
-  const addMember = () => {
-    // Logic to add a member
-    // For example, you can make an API call here
-    console.log("Adding new member:", newMemberUsername);
-    // Update UI or show success message
-    Alert.alert("Member Added", `Added ${newMemberUsername} to the group`);
-    // Clear input field
-    setNewMemberUsername("");
+  const handleUserSelect = async (user) => {
+    try {
+      // Tạo một phòng trò chuyện mới hoặc tham gia phòng trò chuyện nhóm
+    } catch (error) {
+      console.error("Error selecting user:", error);
+    }
   };
 
-  const deleteMember = (memberId) => {
-    // Logic to delete a member
-    // For example, you can make an API call here
-    console.log("Deleting member:", memberId);
-    // Update UI or show success message
-    Alert.alert("Member Deleted", `Deleted member with ID: ${memberId}`);
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      const updatedRoom = await chatService.updateChatGroup({
+        chatroomId: selectedRoom._id,
+        members,
+        name: groupName,
+        image: selectedRoom.image || "",
+        adminId: selectedRoom.admin._id,
+        newAdminId: newAdmin || selectedRoom.admin._id, // Assuming admin remains the same
+      });
+      setSelectedRoom(updatedRoom); // Assuming response contains updated room data
+      setRoomList((prevRooms) =>
+        prevRooms.map((room) =>
+          room._id === updatedRoom._id ? updatedRoom : room
+        )
+      );
+      // Emit event to update group details in other clients
+      // socket.emit("update-group", updatedRoom);
+    } catch (error) {
+      console.error("Error updating group:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteMember = async (memberId) => {
+    setLoading(true);
+    const updatedMembers = members.filter((member) => member._id !== memberId);
+    try {
+      const updatedRoom = await chatService.updateChatGroup({
+        chatroomId: selectedRoom._id,
+        members: updatedMembers,
+        name: groupName,
+        image: selectedRoom.image || "",
+        adminId: selectedRoom.admin._id,
+        newAdminId: newAdmin || selectedRoom.admin._id, // Assuming admin remains the same
+      });
+      setSelectedRoom(updatedRoom); // Assuming response contains updated room data
+      setRoomList((prevRooms) =>
+        prevRooms.map((room) =>
+          room._id === updatedRoom._id ? updatedRoom : room
+        )
+      );
+      // Emit event to update group details in other clients
+      // socket.emit("update-group", updatedRoom);
+    } catch (error) {
+      console.error("Error updating group:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Group Info</Text>
-
+      <View style={styles.inputContainer}>
+        <TextInput
+          style={styles.input}
+          value={groupImage}
+          onChangeText={setGroupImage}
+          placeholder="Enter new group image URL"
+        />
+        <TouchableOpacity style={styles.button} onPress={() => {}}>
+          <Text style={styles.buttonText}>Change Image</Text>
+        </TouchableOpacity>
+      </View>
       <Text style={styles.subtitle}>Group Name:</Text>
       {isAdmin ? (
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.input}
             value={groupName}
-            onChangeText={setGroupName}
+            onChangeText={(text) => setGroupName(text)}
             placeholder="Enter new group name"
           />
-          <TouchableOpacity style={styles.button} onPress={changeGroupName}>
+          <TouchableOpacity style={styles.button} onPress={handleSave}>
             <Text style={styles.buttonText}>Change</Text>
           </TouchableOpacity>
         </View>
       ) : (
         <Text style={styles.infoText}>{selectedRoom.name}</Text>
+      )}
+      {isAdmin && (
+        <View style={styles.inputContainer}>
+          <View style={styles.search}>
+            <TextInput
+              style={styles.searchInput}
+              value={searchText}
+              onChangeText={handleSearch}
+              placeholder="Enter username to add member"
+            />
+            <TouchableOpacity style={styles.button} onPress={() => {}}>
+              <Text style={styles.buttonText}>Add Member</Text>
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            data={filteredUsers}
+            renderItem={({ item }) => (
+              <TouchableOpacity onPress={() => handleUserSelect(item)}>
+                <View style={styles.item}>
+                  <Image source={{ uri: item.avatar }} style={styles.avatar} />
+                  <Text style={styles.username}>{item.username}</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+            keyExtractor={(item) => item.id.toString()}
+          />
+        </View>
       )}
 
       <Text style={styles.subtitle}>Admin:</Text>
@@ -87,20 +193,6 @@ const GroupInfoScreen = () => {
           )}
         </View>
       ))}
-
-      {isAdmin && (
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.input}
-            value={newMemberUsername}
-            onChangeText={setNewMemberUsername}
-            placeholder="Enter username to add member"
-          />
-          <TouchableOpacity style={styles.button} onPress={addMember}>
-            <Text style={styles.buttonText}>Add Member</Text>
-          </TouchableOpacity>
-        </View>
-      )}
     </View>
   );
 };
@@ -166,6 +258,25 @@ const styles = StyleSheet.create({
   buttonText: {
     color: "white",
     fontWeight: "bold",
+  },
+  item: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#ccc",
+  },
+  search: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: "#ccc",
+    marginBottom: 10,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
   },
 });
 
