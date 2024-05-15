@@ -8,6 +8,8 @@ import {
   TextInput,
   FlatList,
 } from "react-native";
+import { Platform } from "react-native";
+import ImagePicker from "react-native-image-picker";
 import { useChat } from "../provider/ChatProvider";
 import { useAuth } from "../provider/AuthProvider";
 import chatService from "../services/chatService";
@@ -24,8 +26,9 @@ const GroupInfoScreen = () => {
   const [newMemberUsername, setNewMemberUsername] = useState("");
   const { userVerified } = useAuth();
   // const isAdmin = selectedRoom.admin._id === userVerified._id;
-  const isAdmin = true;
-  console.log(isAdmin, userVerified);
+  const isAdmin = userVerified._id === selectedRoom.admin._id;
+  console.log(isAdmin, userVerified, selectedRoom);
+
   const [groupImage, setGroupImage] = useState(
     selectedRoom.image || "https://via.placeholder.com/150"
   );
@@ -34,11 +37,14 @@ const GroupInfoScreen = () => {
     const fetchUsers = async () => {
       if (searchText.trim() !== "") {
         try {
-          const result = await userService.getAllUsers();
-          const filteredResult = result.filter(
-            (user) => user._id !== userVerified._id
+          const result = userVerified.friends.filter((friend) =>
+            friend.username.includes(searchText.trim())
           );
-          setFilteredUsers(filteredResult);
+          const filteredList = result.filter(
+            (user) =>
+              !selectedRoom.members.some((member) => member._id === user._id)
+          );
+          setFilteredUsers(filteredList);
         } catch (error) {
           console.error("Error fetching users:", error);
         }
@@ -115,6 +121,35 @@ const GroupInfoScreen = () => {
     }
   };
 
+  const handleSelectImage = () => {
+    const options = {
+      title: "Select Group Avatar",
+      mediaType: "photo",
+      maxWidth: 200,
+      maxHeight: 200,
+      quality: 0.8,
+      storageOptions: {
+        skipBackup: true,
+        path: "images",
+      },
+    };
+
+    ImagePicker.showImagePicker(options, (response) => {
+      if (response.didCancel) {
+        console.log("User cancelled image picker");
+      } else if (response.error) {
+        console.log("ImagePicker Error: ", response.error);
+      } else {
+        // Here, you can update the groupImage state with the selected image
+        const source =
+          Platform.OS === "android"
+            ? response.uri
+            : response.uri.replace("file://", "");
+        setGroupImage(source);
+      }
+    });
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Group Info</Text>
@@ -125,7 +160,7 @@ const GroupInfoScreen = () => {
           onChangeText={setGroupImage}
           placeholder="Enter new group image URL"
         />
-        <TouchableOpacity style={styles.button} onPress={() => {}}>
+        <TouchableOpacity style={styles.button} onPress={handleSelectImage}>
           <Text style={styles.buttonText}>Change Image</Text>
         </TouchableOpacity>
       </View>
@@ -145,34 +180,38 @@ const GroupInfoScreen = () => {
       ) : (
         <Text style={styles.infoText}>{selectedRoom.name}</Text>
       )}
-      {isAdmin && (
-        <View style={styles.inputContainer}>
-          <View style={styles.search}>
-            <TextInput
-              style={styles.searchInput}
-              value={searchText}
-              onChangeText={handleSearch}
-              placeholder="Enter username to add member"
-            />
-            <TouchableOpacity style={styles.button} onPress={() => {}}>
-              <Text style={styles.buttonText}>Add Member</Text>
-            </TouchableOpacity>
-          </View>
-          <FlatList
-            data={filteredUsers}
-            renderItem={({ item }) => (
-              <TouchableOpacity onPress={() => handleUserSelect(item)}>
-                <View style={styles.item}>
-                  <Image source={{ uri: item.avatar }} style={styles.avatar} />
-                  <Text style={styles.username}>{item.username}</Text>
-                </View>
-              </TouchableOpacity>
-            )}
-            keyExtractor={(item) => item.id.toString()}
-          />
-        </View>
-      )}
 
+      <View style={styles.search}>
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.input}
+            value={searchText}
+            onChangeText={handleSearch}
+            placeholder="Enter username to add member"
+            editable={isAdmin}
+            selectTextOnFocus={isAdmin}
+          />
+          <TouchableOpacity style={styles.button} onPress={() => {}}>
+            <Text style={styles.buttonText}>Add Member</Text>
+          </TouchableOpacity>
+        </View>
+
+        <FlatList
+          data={filteredUsers}
+          renderItem={({ item }) => (
+            <TouchableOpacity onPress={() => handleUserSelect(item)}>
+              <View style={styles.item}>
+                <Image
+                  source={{ uri: item.profilePic }}
+                  style={styles.avatar}
+                />
+                <Text style={styles.username}>{item.username}</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+          keyExtractor={(item) => item._id.toString()}
+        />
+      </View>
       <Text style={styles.subtitle}>Admin:</Text>
       <Text style={styles.infoText}>{selectedRoom.admin.username}</Text>
 
@@ -267,11 +306,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "#ccc",
   },
   search: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: "#ccc",
-    marginBottom: 10,
+    flexDirection: "column",
   },
   searchInput: {
     flex: 1,

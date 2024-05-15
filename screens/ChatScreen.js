@@ -7,9 +7,10 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
+  Modal,
+  TouchableWithoutFeedback,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-// import EmojiSelector from "react-native-emoji-selector";
 import { useChat } from "../provider/ChatProvider";
 import chatService from "../services/chatService";
 import { useAuth } from "../provider/AuthProvider";
@@ -22,12 +23,13 @@ const ChatScreen = ({ route, navigation }) => {
   const [isReplying, setIsReplying] = useState(false);
   const [replyingMessage, setReplyingMessage] = useState(null);
   const [loading, setLoading] = useState(false);
-
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [selectedMessage, setSelectedMessage] = useState(null);
+  const [showPopup, setShowPopup] = useState(false);
 
   const { userVerified } = useAuth();
+  const scrollViewRef = useRef();
 
-  // fetch messages when selected room changes
   useEffect(() => {
     const fetchMessages = async () => {
       if (selectedRoom) {
@@ -40,17 +42,14 @@ const ChatScreen = ({ route, navigation }) => {
     fetchMessages();
   }, [selectedRoom]);
 
-  // listen for new messages
   useEffect(() => {
     socket.on("receive-message", (data) => {
-      console.log("Received message:", data);
       setMessages((prevMessages) => [...prevMessages, data.savedMessage]);
     });
 
     return () => {
       socket.off("receive-message");
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket]);
 
   useEffect(() => {
@@ -64,42 +63,27 @@ const ChatScreen = ({ route, navigation }) => {
         return;
       }
 
+      const messageData = {
+        senderId: userVerified._id,
+        content: newMessage,
+        images: [],
+        roomId: selectedRoom._id,
+        replyMessageId: replyingMessage ? replyingMessage._id : null,
+      };
+
       if (selectedRoom.type === "1v1") {
         const receiverId = selectedRoom.members.find(
           (member) => member._id !== userVerified._id
-        );
-
-        const response = await chatService.sendMessage({
-          senderId: userVerified._id,
-          receiverId: receiverId,
-          content: newMessage,
-          images: [],
-          roomId: selectedRoom._id,
-          replyMessageId: replyingMessage || null,
-        });
-
-        setMessages([...messages, response]);
-        setNewMessage("");
-
-        socket.emit("send-message", {
-          savedMessage: response,
-        });
-      } else if (selectedRoom.type === "group") {
-        const response = await chatService.sendMessage({
-          senderId: userVerified._id,
-          content: newMessage,
-          images: [],
-          roomId: selectedRoom._id,
-          replyMessageId: replyingMessage || null,
-        });
-
-        setMessages([...messages, response]);
-        setNewMessage("");
-
-        socket.emit("send-message", {
-          savedMessage: response,
-        });
+        )._id;
+        messageData.receiverId = receiverId;
       }
+
+      const response = await chatService.sendMessage(messageData);
+
+      setMessages([...messages, response]);
+      setNewMessage("");
+
+      socket.emit("send-message", { savedMessage: response });
     } catch (error) {
       console.error("Error sending message:", error);
     } finally {
@@ -107,9 +91,7 @@ const ChatScreen = ({ route, navigation }) => {
       fetchUpdatedRooms();
       setReplyingMessage(null);
       setIsReplying(false);
-      socket.emit("sort-room", {
-        userId: userVerified._id,
-      });
+      socket.emit("sort-room", { userId: userVerified._id });
     }
   };
 
@@ -118,7 +100,24 @@ const ChatScreen = ({ route, navigation }) => {
     setShowEmojiPicker(false);
   };
 
-  const scrollViewRef = useRef();
+  const handleLongPressMessage = (message) => {
+    setSelectedMessage(message);
+    setShowPopup(true);
+  };
+
+  const handleReply = () => {
+    setIsReplying(true);
+    setReplyingMessage(selectedMessage);
+    setShowPopup(false);
+  };
+
+  const handleDelete = async () => {
+    if (selectedMessage) {
+      await chatService.deleteMessage(selectedMessage._id);
+      setMessages(messages.filter((msg) => msg._id !== selectedMessage._id));
+      setShowPopup(false);
+    }
+  };
 
   const formatMessageTime = (timestamp) => {
     const date = new Date(timestamp);
@@ -127,22 +126,54 @@ const ChatScreen = ({ route, navigation }) => {
     return `${hours}:${minutes < 10 ? "0" : ""}${minutes}`;
   };
 
-  // const handleInfoPress = () => {
-  //   navigation.navigate("MemberInfo", { member: selectedRoom });
-  // };
+  const getInitials = (name) => {
+    return name ? name.charAt(0).toUpperCase() : "?";
+  };
+
+  const getUserName = (members) => {
+    const otherMember = members.find(
+      (member) => member._id !== userVerified._id
+    );
+    return otherMember ? otherMember.username : "Unknown";
+  };
+
+  const getUserProfilePic = (members) => {
+    const otherMember = members.find(
+      (member) => member._id !== userVerified._id
+    );
+    return otherMember ? otherMember.profilePic : null;
+  };
+
+  const chatTitle =
+    selectedRoom.type === "group"
+      ? selectedRoom.name
+      : getUserName(selectedRoom.members);
+
+  const chatProfilePic =
+    selectedRoom.type === "group"
+      ? selectedRoom.profilePic
+      : getUserProfilePic(selectedRoom.members);
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
           <Ionicons name="chevron-back" size={24} color="#ffffff" />
         </TouchableOpacity>
         <View style={styles.headerInfo}>
-          <Image
-            source={require("../assets/favicon.png")}
-            style={styles.avatar}
-          />
-          <Text style={styles.headerText}></Text>
+          {chatProfilePic ? (
+            <Image source={{ uri: chatProfilePic }} style={styles.avatar} />
+          ) : (
+            <View style={styles.fallbackAvatar}>
+              <Text style={styles.fallbackAvatarText}>
+                {getInitials(chatTitle)}
+              </Text>
+            </View>
+          )}
+          <Text style={styles.headerText}>{chatTitle}</Text>
         </View>
         <View style={styles.info}>
           <TouchableOpacity style={styles.infoButton}>
@@ -165,49 +196,82 @@ const ChatScreen = ({ route, navigation }) => {
         ref={scrollViewRef}
         contentContainerStyle={styles.chatContainer}
       >
-        {/* Example messages */}
         {messages.map((message, index) => {
           const isSentMessage = message.sender._id === userVerified._id;
-          console.log(message);
+          const senderProfilePic = message.sender.profilePic;
+          const senderInitials = getInitials(message.sender.username);
           return (
-            <View
+            <TouchableWithoutFeedback
               key={index}
-              style={[
-                styles.messageContainer,
-                isSentMessage
-                  ? styles.messageContainerRight
-                  : styles.messageContainerLeft,
-              ]}
+              onLongPress={() => handleLongPressMessage(message)}
             >
-              {!isSentMessage && (
-                <Image
-                  source={require("../assets/icon.png")}
-                  style={styles.avatarSmallleft}
-                />
-              )}
               <View
                 style={[
-                  styles.messageBubble,
+                  styles.messageContainer,
                   isSentMessage
-                    ? styles.receivedMessage
-                    : styles.receivedMessage,
+                    ? styles.messageContainerRight
+                    : styles.messageContainerLeft,
                 ]}
               >
-                <Text style={styles.messageText}>{message.content}</Text>
-                <Text style={styles.messageTime}>
-                  {formatMessageTime(message.timestamp)}
-                </Text>
+                {!isSentMessage &&
+                  (senderProfilePic ? (
+                    <Image
+                      source={{ uri: senderProfilePic }}
+                      style={styles.avatarSmallLeft}
+                    />
+                  ) : (
+                    <View style={styles.fallbackAvatar}>
+                      <Text style={styles.fallbackAvatarText}>
+                        {senderInitials}
+                      </Text>
+                    </View>
+                  ))}
+                <View
+                  style={[
+                    styles.messageBubble,
+                    isSentMessage ? styles.sentMessage : styles.receivedMessage,
+                  ]}
+                >
+                  {message.replyTo && (
+                    <View style={styles.replyContainer}>
+                      <Text style={styles.replyText}>
+                        {message.replyTo.content}
+                      </Text>
+                    </View>
+                  )}
+                  <Text style={styles.messageText}>{message.content}</Text>
+                  <Text style={styles.messageTime}>
+                    {formatMessageTime(message.timestamp)}
+                  </Text>
+                </View>
+                {isSentMessage &&
+                  (senderProfilePic ? (
+                    <Image
+                      source={{ uri: senderProfilePic }}
+                      style={styles.avatarSmallRight}
+                    />
+                  ) : (
+                    <View style={styles.fallbackAvatar}>
+                      <Text style={styles.fallbackAvatarText}>
+                        {senderInitials}
+                      </Text>
+                    </View>
+                  ))}
               </View>
-              {isSentMessage && (
-                <Image
-                  source={require("../assets/favicon.png")}
-                  style={styles.avatarSmallright}
-                />
-              )}
-            </View>
+            </TouchableWithoutFeedback>
           );
         })}
       </ScrollView>
+      {isReplying && (
+        <View style={styles.replyingContainer}>
+          <Text style={styles.replyingText}>
+            Replying to: {replyingMessage.content}
+          </Text>
+          <TouchableOpacity onPress={() => setIsReplying(false)}>
+            <Ionicons name="close" size={24} color="#ff0000" />
+          </TouchableOpacity>
+        </View>
+      )}
       <View style={styles.inputContainer}>
         <TouchableOpacity style={styles.iconButton}>
           <Ionicons name="camera" size={24} color="#333333" />
@@ -218,26 +282,53 @@ const ChatScreen = ({ route, navigation }) => {
         <TouchableOpacity style={styles.iconButton}>
           <Ionicons name="mic" size={24} color="#333333" />
         </TouchableOpacity>
-        <View style={styles.input}>
-          <TextInput
-            placeholder="Type a message..."
-            value={newMessage}
-            onChangeText={(text) => setNewMessage(text)}
-          />
-          <TouchableOpacity
-            style={styles.iconButton}
-            onPress={() => setShowEmojiPicker(true)}
-          >
-            {showEmojiPicker && (
-              <EmojiSelector onEmojiSelected={handleEmojiSelect} />
-            )}
-            <Ionicons name="happy" size={24} color="#333333" />
-          </TouchableOpacity>
-        </View>
-        <TouchableOpacity style={styles.sendButton} onPress={handleSendMessage}>
+        <TextInput
+          style={styles.input}
+          placeholder="Type a message"
+          value={newMessage}
+          onChangeText={setNewMessage}
+        />
+        <TouchableOpacity
+          style={styles.iconButton}
+          onPress={() => setShowEmojiPicker(!showEmojiPicker)}
+        >
+          <Ionicons name="happy-outline" size={24} color="#333333" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.sendButton, loading && { backgroundColor: "#ccc" }]}
+          onPress={handleSendMessage}
+          disabled={loading}
+        >
           <Ionicons name="send" size={24} color="#ffffff" />
         </TouchableOpacity>
       </View>
+      {showPopup && (
+        <Modal
+          transparent={true}
+          animationType="slide"
+          visible={showPopup}
+          onRequestClose={() => setShowPopup(false)}
+        >
+          <TouchableWithoutFeedback onPress={() => setShowPopup(false)}>
+            <View style={styles.modalOverlay}>
+              <View style={styles.popupContainer}>
+                <TouchableOpacity
+                  style={styles.popupButton}
+                  onPress={handleReply}
+                >
+                  <Text style={styles.popupButtonText}>Reply</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.popupButton}
+                  onPress={handleDelete}
+                >
+                  <Text style={styles.popupButtonText}>Delete</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
+      )}
     </View>
   );
 };
@@ -309,13 +400,13 @@ const styles = StyleSheet.create({
   },
   sentMessage: {
     backgroundColor: "#4267B2",
-    alignSelf: "flex-end", // Đảm bảo tin nhắn gửi nằm ở bên phải
+    alignSelf: "flex-end",
   },
   receivedMessage: {
     backgroundColor: "#ECEFF1",
     borderWidth: 1,
     borderColor: "#ccc",
-    alignSelf: "flex-start", // Đảm bảo tin nhắn nhận nằm ở bên trái
+    alignSelf: "flex-start",
   },
   messageText: {
     fontSize: 16,
@@ -327,17 +418,32 @@ const styles = StyleSheet.create({
     marginTop: 5,
     textAlign: "left",
   },
-  avatarSmallleft: {
+  avatarSmallLeft: {
     width: 30,
     height: 30,
     borderRadius: 15,
     marginRight: 10,
   },
-  avatarSmallright: {
+  avatarSmallRight: {
     width: 30,
     height: 30,
     borderRadius: 15,
-    marginLeft: 20,
+    marginLeft: 10,
+  },
+  fallbackAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "#4267B2",
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: 10,
+    marginRight: 10,
+  },
+  fallbackAvatarText: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "bold",
   },
   inputContainer: {
     flexDirection: "row",
@@ -346,13 +452,10 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#ccc",
   },
-  iconButton: {
-    padding: 5,
-  },
   input: {
     flex: 1,
     paddingVertical: 12,
-    paddingHorizontal: 20,
+    paddingHorizontal: 15,
     fontSize: 16,
     backgroundColor: "#f0f0f0",
     borderWidth: 1,
@@ -366,6 +469,53 @@ const styles = StyleSheet.create({
     backgroundColor: "#4267B2",
     borderRadius: 30,
     padding: 10,
+  },
+  iconButton: {
+    paddingRight: 5,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  popupContainer: {
+    width: 200,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    overflow: "hidden",
+  },
+  popupButton: {
+    padding: 15,
+    alignItems: "center",
+  },
+  popupButtonText: {
+    fontSize: 18,
+    color: "#4267B2",
+  },
+  replyingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: "#f0f0f0",
+    borderTopWidth: 1,
+    borderTopColor: "#ccc",
+  },
+  replyingText: {
+    flex: 1,
+    fontSize: 16,
+    color: "#333",
+  },
+  replyContainer: {
+    borderLeftWidth: 2,
+    borderLeftColor: "#4267B2",
+    paddingLeft: 10,
+    marginBottom: 5,
+  },
+  replyText: {
+    fontSize: 14,
+    color: "#333",
   },
 });
 

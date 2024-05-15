@@ -12,6 +12,7 @@ import RechangePasswordScreen from "./screens/RechangePasswordScreen";
 import FriendListScreen from "./screens/FriendListScreen";
 import OtpScreen from "./screens/OtpScreen";
 import AddMembersScreen from "./screens/AddMembersScreen";
+import InfoScreen from "./screens/InfoScreen";
 // import ChatGroup from "./screens/ChatGroup";
 // import MemberInfoScreen from "./screens/GroupInfoScreen";
 import GroupInfoScreen from "./screens/GroupInfoScreen";
@@ -47,9 +48,8 @@ const App = () => {
             <Stack.Screen name="Setting" component={SettingsScreen} />
             <Stack.Screen name="FriendList" component={FriendListScreen} />
             <Stack.Screen name="AddMembers" component={AddMembersScreen} />
-            {/* <Stack.Screen name="ChatGroup" component={ChatGroup} />
-            <Stack.Screen name="MemberInfo" component={MemberInfoScreen} /> */}
             <Stack.Screen name="GroupInfo" component={GroupInfoScreen} />
+            <Stack.Screen name="Info" component={InfoScreen} />
           </Stack.Navigator>
         </NavigationContainer>
       </ChatProvider>

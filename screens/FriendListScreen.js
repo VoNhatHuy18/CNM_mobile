@@ -25,23 +25,23 @@ const FriendRequestItem = ({ user, onAccept, onReject }) => {
 };
 
 const FriendListScreen = () => {
-  const {userVerified, setUserVerified}= useAuth()
+  const { userVerified, setUserVerified } = useAuth();
   const handleAcceptFriendRequest = async (requester) => {
-    console.log('Accept friend request');
+    console.log("Accept friend request");
     try {
-        const response = await userService.acceptFriendRequest({
-            requesterId: requester._id,
-            userId: userVerified._id,
-        });
+      const response = await userService.acceptFriendRequest({
+        requesterId: requester._id,
+        userId: userVerified._id,
+      });
 
-        const userUpdated = await userService.getUserById(userVerified._id);
-        setUserVerified(userUpdated);
+      const userUpdated = await userService.getUserById(userVerified._id);
+      setUserVerified(userUpdated);
 
-        // socket.emit('accept-friend-request', response);
+      // socket.emit('accept-friend-request', response);
     } catch (error) {
-        console.error('Error accepting friend request:', error);
+      console.error("Error accepting friend request:", error);
     }
-};
+  };
 
   const handleReject = (userId) => {
     // Logic to reject friend request
